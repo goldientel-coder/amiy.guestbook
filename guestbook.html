@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Leave your mark!</title>
+
+<!-- ================================================================
+  Fonts
+  "Nine By Five NBP" is a pixel font by Nate Halley (FontStruct),
+  licensed CC BY-SA -- if you publish this site, a small credit to
+  Nate Halley / FontStruct somewhere (like a footer line) keeps you
+  license-compliant. Served here via onlinewebfonts' CDN mirror.
+================================================================= -->
+<style>
+@font-face{
+  font-family: "Nine By Five NBP";
+  src: url("https://db.onlinewebfonts.com/t/00d715f4761b8ac0f7095decf1e95288.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/00d715f4761b8ac0f7095decf1e95288.woff") format("woff"),
+       url("https://db.onlinewebfonts.com/t/00d715f4761b8ac0f7095decf1e95288.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+</style>
+
+<!-- ================================================================
+  Firebase (compat build -- works with plain <script> tags, no
+  bundler needed, so it drops straight into neocities)
+================================================================= -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  /* ==============================================================
+     COLOR TOKENS -- change these whenever you want, everything
+     below reads from these variables.
+     cream = #fffaec (was the plain-white surfaces)
+     soft pink = #fff0f7 (unified from the header/page pinks)
+  ============================================================== */
+  :root{
+    --page-bg:        #fff0f7;
+    --polka-dot:      #fffaec;
+
+    --card-bg:        #fffaec;
+    --card-border:    #ffd3e8;
+    --header-bg:      #fff0f7;
+    --header-text:    #b5406e;
+
+    --accent:         #ff8fc4;
+    --accent-dark:    #e8629f;
+    --text-main:      #7a4b60;
+    --text-soft:      #b98aa2;
+
+    --bubble-bg:      #fffaec;
+    --bubble-border:  #ffd3e8;
+    --reply-bg:       #fff0f7;
+
+    --input-bg:       #fffaec;
+    --input-border:   #ffcde5;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    -webkit-font-smoothing: none;
+    color:var(--text-main);
+    background-color: var(--page-bg);
+    /* scattered polka dots -- several differently-sized, off-grid
+       dots per tile so it doesn't read as a straight repeating row */
+    background-image:
+      radial-gradient(circle at 12% 18%, var(--polka-dot) 4.5px, transparent 5px),
+      radial-gradient(circle at 52% 8%,  var(--polka-dot) 3px,   transparent 3.5px),
+      radial-gradient(circle at 82% 30%, var(--polka-dot) 5.5px, transparent 6px),
+      radial-gradient(circle at 28% 48%, var(--polka-dot) 3.5px, transparent 4px),
+      radial-gradient(circle at 68% 62%, var(--polka-dot) 5px,   transparent 5.5px),
+      radial-gradient(circle at 6% 78%,  var(--polka-dot) 3px,   transparent 3.5px),
+      radial-gradient(circle at 92% 82%, var(--polka-dot) 4px,   transparent 4.5px),
+      radial-gradient(circle at 40% 88%, var(--polka-dot) 2.5px, transparent 3px),
+      radial-gradient(circle at 60% 20%, var(--polka-dot) 2.5px, transparent 3px);
+    background-size: 160px 160px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 40px 16px;
+  }
+
+  /* ==============================================================
+     CARD FRAME -- blockier corners + a pixel scallop strip along
+     the header/sendbar edges, echoing the lace band in your layout
+  ============================================================== */
+  .guestbook{
+    position:relative;
+    width:700px;
+    height:500px;
+    max-width:100%;
+    background:var(--card-bg);
+    border-radius:10px;
+    border:3px solid var(--card-border);
+    box-shadow: 0 10px 30px rgba(255,143,196,0.25);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .gb-header{
+    background:var(--header-bg);
+    padding:22px 26px 18px;
+    position:relative;
+    text-align:center;
+    flex:0 0 auto;
+    border-bottom: 3px dashed var(--card-border);
+  }
+
+  /* pixel corner hearts, top corners of the card */
+  .gb-header::before,
+  .gb-header::after{
+    content:"♥";
+    position:absolute;
+    top:8px;
+    font-size:0.9rem;
+    color:var(--accent);
+    text-shadow: 1px 1px 0 var(--accent-dark);
+  }
+  .gb-header::before{ left:12px; }
+  .gb-header::after{ right:12px; }
+
+  .gb-title{
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-size:1.5rem;
+    letter-spacing:2px;
+    color:var(--header-text);
+    margin:6px 0 0;
+    text-shadow: 1px 1px 0 #fff;
+  }
+
+  .gb-subtitle{
+    font-size:0.68rem;
+    letter-spacing:0.5px;
+    color:var(--accent-dark);
+    margin:8px 0 16px;
+  }
+
+  /* little scalloped strip under the header, like the lace bands
+     in your layout screenshot */
+  .gb-scallop{
+    height:10px;
+    background-image: radial-gradient(circle at 8px 0, var(--card-bg) 8px, transparent 8.5px);
+    background-size: 16px 10px;
+    background-repeat: repeat-x;
+    background-color: var(--card-border);
+  }
+
+  .gb-dots{
+    position:absolute;
+    top:20px; right:20px;
+    display:flex; gap:6px;
+  }
+  .gb-dots span{
+    width:6px; height:6px;
+    background:#f6c9dd;
+  }
+  .gb-dots span:last-child{ background:var(--accent); }
+
+  .gb-name-input{
+    width:100%;
+    padding:10px 14px;
+    border-radius:6px;
+    border:1.5px solid var(--input-border);
+    background:var(--input-bg);
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-size:0.72rem;
+    color:var(--text-main);
+    outline:none;
+  }
+  .gb-name-input::placeholder{ color:var(--text-soft); }
+  .gb-name-input:focus{ border-color:var(--accent); }
+
+  /* ==============================================================
+     COMMENTS LIST
+  ============================================================== */
+  .gb-comments{
+    flex:1 1 auto;
+    overflow-y:auto;
+    padding:18px 22px;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+  }
+
+  .gb-comments::-webkit-scrollbar{ width:8px; }
+  .gb-comments::-webkit-scrollbar-track{ background:transparent; }
+  .gb-comments::-webkit-scrollbar-thumb{
+    background:var(--card-border);
+    border-radius:0px;
+  }
+
+  .gb-empty{
+    text-align:center;
+    color:var(--text-soft);
+    font-size:0.75rem;
+    line-height:1.8;
+    padding:20px 0;
+  }
+
+  .gb-entry{ display:flex; gap:12px; }
+
+  .gb-avatar{
+    width:44px; height:44px;
+    border-radius:50%;
+    flex-shrink:0;
+    object-fit:cover;
+    background:#ffeaf4;
+    border:2px solid var(--card-border);
+  }
+
+  .gb-body{ flex:1; min-width:0; }
+
+  .gb-name-row{
+    display:flex;
+    align-items:baseline;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+
+  .gb-name{
+    font-weight:700;
+    color:var(--accent-dark);
+    font-size:0.78rem;
+  }
+
+  .gb-bubble{
+    margin-top:6px;
+    background:var(--bubble-bg);
+    border:1.5px solid var(--bubble-border);
+    border-radius:8px;
+    padding:10px 14px;
+    font-size:0.72rem;
+    line-height:1.7;
+    word-break:break-word;
+  }
+
+  .gb-bubble img.gb-emo{
+    height:1.3em;
+    vertical-align:middle;
+    margin:0 1px;
+  }
+
+  .gb-meta-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-top:6px;
+  }
+
+  .gb-reply-btn{
+    background:none;
+    border:1.5px solid var(--card-border);
+    color:var(--accent-dark);
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-size:0.6rem;
+    font-weight:600;
+    padding:4px 10px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .gb-reply-btn:hover{ background:var(--reply-bg); }
+
+  .gb-time{
+    font-size:0.58rem;
+    color:var(--text-soft);
+    margin-left:auto;
+  }
+
+  /* replies */
+  .gb-replies{
+    margin-top:10px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    padding-left:14px;
+    border-left:2px dashed var(--card-border);
+  }
+  .gb-reply{ display:flex; gap:10px; }
+  .gb-reply .gb-avatar{ width:32px; height:32px; }
+  .gb-reply .gb-bubble{ background:var(--reply-bg); font-size:0.68rem; }
+
+  .gb-reply-form{
+    margin-top:8px;
+    display:none;
+    gap:8px;
+  }
+  .gb-reply-form.open{ display:flex; }
+  .gb-reply-form input{
+    flex:1;
+    padding:7px 12px;
+    border-radius:6px;
+    border:1.5px solid var(--input-border);
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-size:0.62rem;
+    outline:none;
+  }
+  .gb-reply-form button{
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:0 14px;
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-size:0.6rem;
+    font-weight:700;
+    cursor:pointer;
+  }
+
+  /* ==============================================================
+     SEND BAR
+  ============================================================== */
+  .gb-sendbar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:14px 20px;
+    background:var(--header-bg);
+    border-top: 3px dashed var(--card-border);
+    position:relative;
+    flex:0 0 auto;
+  }
+
+  .gb-emo-btn{
+    width:32px; height:32px;
+    border-radius:50%;
+    border:1.5px solid var(--card-border);
+    background:var(--card-bg);
+    font-size:0.9rem;
+    cursor:pointer;
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .gb-msg-input{
+    flex:1;
+    padding:10px 16px;
+    border-radius:999px;
+    border:1.5px solid var(--input-border);
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-size:0.68rem;
+    outline:none;
+  }
+  .gb-msg-input:focus{ border-color:var(--accent); }
+
+  .gb-send-btn{
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    padding:10px 20px;
+    border-radius:999px;
+    font-family:'Nine By Five NBP', 'Press Start 2P', 'Courier New', monospace;
+    font-weight:700;
+    font-size:0.68rem;
+    letter-spacing:1px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .gb-send-btn:hover{ background:var(--accent-dark); }
+
+  /* emoticon popup */
+  .gb-emo-popup{
+    display:none;
+    position:absolute;
+    bottom:60px;
+    left:18px;
+    width:220px;
+    max-height:150px;
+    overflow-y:auto;
+    background:var(--card-bg);
+    border:1.5px solid var(--card-border);
+    border-radius:8px;
+    box-shadow:0 6px 18px rgba(255,143,196,0.3);
+    padding:10px;
+    grid-template-columns:repeat(5, 1fr);
+    gap:6px;
+  }
+  .gb-emo-popup.open{ display:grid; }
+  .gb-emo-popup img{
+    width:100%;
+    aspect-ratio:1;
+    object-fit:contain;
+    cursor:pointer;
+    border-radius:6px;
+    padding:3px;
+  }
+  .gb-emo-popup img:hover{ background:var(--reply-bg); }
+
+  /* little bow divider footer, echoing the ribbon at the bottom
+     of your site layout */
+  .gb-bow-footer{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding:6px 0 10px;
+    background:var(--header-bg);
+  }
+  .gb-bow-footer .line{
+    height:2px;
+    width:70px;
+    background:var(--card-border);
+  }
+  .gb-bow{
+    width:16px; height:10px;
+    position:relative;
+  }
+  .gb-bow::before,
+  .gb-bow::after{
+    content:"";
+    position:absolute;
+    top:0;
+    width:7px; height:10px;
+    background:var(--accent);
+  }
+  .gb-bow::before{ left:0; clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+  .gb-bow::after{ right:0; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+</style>
+</head>
+<body>
+
+<div class="guestbook">
+
+  <div class="gb-header">
+    <div class="gb-dots"><span></span><span></span><span></span></div>
+    <h1 class="gb-title">Leave your mark !</h1>
+    <p class="gb-subtitle">please remember to be kind &#9825;</p>
+    <input id="gbNameInput" class="gb-name-input" type="text" placeholder="your name" maxlength="30" />
+  </div>
+  <div class="gb-scallop"></div>
+
+  <div id="gbComments" class="gb-comments">
+    <p class="gb-empty">no messages yet... be the first to sign! &#9825;</p>
+  </div>
+
+  <div class="gb-bow-footer">
+    <span class="line"></span>
+    <span class="gb-bow"></span>
+    <span class="line"></span>
+  </div>
+
+  <div class="gb-sendbar">
+    <button id="gbEmoBtn" class="gb-emo-btn" type="button" title="emoticons">&#9786;</button>
+    <div id="gbEmoPopup" class="gb-emo-popup"></div>
+    <input id="gbMsgInput" class="gb-msg-input" type="text" placeholder="leave something nice &#9825;" maxlength="300" />
+    <button id="gbSendBtn" class="gb-send-btn" type="button">send</button>
+  </div>
+
+</div>
+
+<script>
+/* =====================================================================
+   1. FIREBASE SETUP -- fill this in with YOUR Firebase project's config
+      (Firebase console -> Project settings -> your web app -> SDK setup)
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const guestbookRef = db.collection("guestbook");
+
+/* =====================================================================
+   2. EMOTICONS -- replace src with your own pngs/gifs. id can be
+      anything short, no spaces. These paths assume an /assets/emoticons/
+      folder next to this html file on neocities -- adjust as needed.
+   ===================================================================== */
+const EMOTICONS = [
+  { id: "heart",  src: "assets/emoticons/heart.png" },
+  { id: "star",   src: "assets/emoticons/star.png" },
+  { id: "cat",    src: "assets/emoticons/cat.png" },
+  { id: "flower", src: "assets/emoticons/flower.png" },
+  { id: "bow",    src: "assets/emoticons/bow.png" },
+];
+
+/* =====================================================================
+   3. AVATARS -- map a commenter's name (lowercase) to a specific image.
+      Anyone not listed gets "default". Since this is a live public
+      guestbook, you'll typically add someone here after they've
+      commented a few times, if you want to give them a custom icon.
+   ===================================================================== */
+const AVATARS = {
+  default: "assets/avatars/default.png",
+  // "clover bluu": "assets/avatars/clover.png",
+};
+
+function getAvatar(name){
+  return AVATARS[(name || "").trim().toLowerCase()] || AVATARS.default;
+}
+
+/* ===================================================================== */
+
+const commentsEl  = document.getElementById('gbComments');
+const nameInput   = document.getElementById('gbNameInput');
+const msgInput    = document.getElementById('gbMsgInput');
+const sendBtn     = document.getElementById('gbSendBtn');
+const emoBtn      = document.getElementById('gbEmoBtn');
+const emoPopup    = document.getElementById('gbEmoPopup');
+
+function escapeHtml(str){
+  return (str || "").replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[c]));
+}
+
+// turns "hi {{emo:heart}} there" into escaped text with <img> tags,
+// only ever inserting images from our own known EMOTICONS list.
+function renderMessage(raw){
+  const escaped = escapeHtml(raw);
+  return escaped.replace(/\{\{emo:([a-zA-Z0-9_-]+)\}\}/g, (match, id) => {
+    const emo = EMOTICONS.find(e => e.id === id);
+    if (!emo) return '';
+    return `<img class="gb-emo" src="${emo.src}" alt=":${escapeHtml(id)}:" />`;
+  });
+}
+
+function formatTimestamp(ts){
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : ts;
+  const pad = n => String(n).padStart(2, '0');
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(h)}:${pad(d.getMinutes())} ${ampm}`;
+}
+
+/* ---------------------------------------------------------------------
+   Build & populate the emoticon popup
+--------------------------------------------------------------------- */
+EMOTICONS.forEach(emo => {
+  const img = document.createElement('img');
+  img.src = emo.src;
+  img.title = emo.id;
+  img.addEventListener('click', () => {
+    insertAtCursor(msgInput, `{{emo:${emo.id}}}`);
+    emoPopup.classList.remove('open');
+    msgInput.focus();
+  });
+  emoPopup.appendChild(img);
+});
+
+emoBtn.addEventListener('click', () => emoPopup.classList.toggle('open'));
+document.addEventListener('click', (e) => {
+  if (!emoPopup.contains(e.target) && e.target !== emoBtn){
+    emoPopup.classList.remove('open');
+  }
+});
+
+function insertAtCursor(input, text){
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + text + input.value.slice(end);
+  const pos = start + text.length;
+  input.setSelectionRange(pos, pos);
+}
+
+/* ---------------------------------------------------------------------
+   Rendering the comment list (live, latest first)
+--------------------------------------------------------------------- */
+function renderEntry(docId, data){
+  const wrap = document.createElement('div');
+  wrap.className = 'gb-entry';
+
+  const avatar = document.createElement('img');
+  avatar.className = 'gb-avatar';
+  avatar.src = getAvatar(data.name);
+  avatar.alt = '';
+  wrap.appendChild(avatar);
+
+  const body = document.createElement('div');
+  body.className = 'gb-body';
+
+  body.innerHTML = `
+    <div class="gb-name-row">
+      <span class="gb-name">${escapeHtml(data.name)}</span>
+    </div>
+    <div class="gb-bubble">${renderMessage(data.message)}</div>
+    <div class="gb-meta-row">
+      <button class="gb-reply-btn" type="button">reply</button>
+      <span class="gb-time">${formatTimestamp(data.timestamp)}</span>
+    </div>
+    <div class="gb-replies"></div>
+    <div class="gb-reply-form">
+      <input type="text" placeholder="your name" class="gb-reply-name" maxlength="30" />
+      <input type="text" placeholder="write a reply..." class="gb-reply-msg" maxlength="300" />
+      <button type="button">send</button>
+    </div>
+  `;
+
+  // replies
+  const repliesEl = body.querySelector('.gb-replies');
+  (data.replies || []).forEach(r => {
+    const rEl = document.createElement('div');
+    rEl.className = 'gb-reply';
+    rEl.innerHTML = `
+      <img class="gb-avatar" src="${getAvatar(r.name)}" alt="" />
+      <div class="gb-body">
+        <div class="gb-name-row"><span class="gb-name">${escapeHtml(r.name)}</span></div>
+        <div class="gb-bubble">${renderMessage(r.message)}</div>
+        <div class="gb-meta-row"><span class="gb-time">${formatTimestamp(r.timestamp)}</span></div>
+      </div>
+    `;
+    repliesEl.appendChild(rEl);
+  });
+
+  // reply toggle
+  const replyBtn = body.querySelector('.gb-reply-btn');
+  const replyForm = body.querySelector('.gb-reply-form');
+  replyBtn.addEventListener('click', () => replyForm.classList.toggle('open'));
+
+  // reply submit
+  const rNameInput = body.querySelector('.gb-reply-name');
+  const rMsgInput  = body.querySelector('.gb-reply-msg');
+  const rSendBtn   = body.querySelector('.gb-reply-form button');
+
+  rSendBtn.addEventListener('click', () => submitReply(docId, rNameInput, rMsgInput));
+  rMsgInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitReply(docId, rNameInput, rMsgInput);
+  });
+
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function submitReply(docId, nameEl, msgEl){
+  const name = nameEl.value.trim();
+  const message = msgEl.value.trim();
+  if (!name || !message) return;
+
+  guestbookRef.doc(docId).update({
+    replies: firebase.firestore.FieldValue.arrayUnion({
+      name,
+      message,
+      // FieldValue.serverTimestamp() isn't allowed inside arrays,
+      // so replies use the visitor's local clock instead.
+      timestamp: firebase.firestore.Timestamp.now()
+    })
+  });
+
+  nameEl.value = '';
+  msgEl.value = '';
+}
+
+guestbookRef.orderBy('timestamp', 'desc').onSnapshot(snapshot => {
+  commentsEl.innerHTML = '';
+  if (snapshot.empty){
+    commentsEl.innerHTML = '<p class="gb-empty">no messages yet... be the first to sign! &#9825;</p>';
+    return;
+  }
+  snapshot.forEach(doc => {
+    commentsEl.appendChild(renderEntry(doc.id, doc.data()));
+  });
+});
+
+/* ---------------------------------------------------------------------
+   Submitting a new top-level comment
+--------------------------------------------------------------------- */
+function submitComment(){
+  const name = nameInput.value.trim();
+  const message = msgInput.value.trim();
+  if (!name){ nameInput.focus(); return; }
+  if (!message){ msgInput.focus(); return; }
+
+  guestbookRef.add({
+    name,
+    message,
+    replies: [],
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  msgInput.value = '';
+}
+
+sendBtn.addEventListener('click', submitComment);
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitComment();
+});
+</script>
+</body>
+</html>
